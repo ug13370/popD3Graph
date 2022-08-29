@@ -88,3 +88,5 @@ export class AppComponent implements OnInit {
   }
 }
 ```
+
+Tip:- Copy the bar chart calling function mentioned in ts file and then do the tweaks you require.

@@ -20,9 +20,11 @@ const add = (arr) => {
     arr.forEach((value, index) => {
         sum += value;
     });
-    return sum * 2;
+    return sum;
 };
 exports.add = add;
 __exportStar(require("./simpleBarGraph"), exports);
+__exportStar(require("./stackedBarGraph"), exports);
+__exportStar(require("./groupedBarGraph"), exports);
 //npm link ../popD3Graph
 //# sourceMappingURL=index.js.map

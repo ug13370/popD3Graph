@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.barChart = void 0;
+exports.stackedBarChart = void 0;
 const d3 = require("d3");
 const d3_tip_1 = require("d3-tip");
 const responsivefy = function (svg) {
@@ -20,7 +20,7 @@ const createSvg = function (selector, tip, svgDims, margin) {
     let svg = d3
         .select(selector.nativeElement)
         .append("svg")
-        .attr("class", "simple-bar-graph-svg")
+        .attr("class", "stacked-bar-graph-svg")
         .attr("width", svgDims.width)
         .attr("height", svgDims.height)
         .call(responsivefy);
@@ -31,12 +31,13 @@ const createSvg = function (selector, tip, svgDims, margin) {
 };
 const createTooltip = function (tooltip) {
     const tip = (0, d3_tip_1.default)()
-        .attr("class", "simple-bar-graph-d3-tip")
+        .attr("class", "stacked-bar-graph-d3-tip")
         .style("z-index", "999999999")
         .direction("e")
         .html((d) => {
-        let key = d.key;
-        let val = d.val;
+        let group_name = d.group;
+        let sub_group_name = d.subGroup;
+        let sub_group_val = d.val;
         return eval("`" + tooltip.text + "`");
     })
         .style("padding", "1%")
@@ -46,7 +47,7 @@ const createTooltip = function (tooltip) {
     return tip;
 };
 const createTooltipFollower = function (svg) {
-    svg.append("circle").attr("id", "simple-bar-graph-tip-follower");
+    svg.append("circle").attr("id", "stacked-bar-graph-tip-follower");
 };
 const createXAxis = function (svg, contentDims, groups, xAxisTick) {
     let xAxis = d3
@@ -57,6 +58,7 @@ const createXAxis = function (svg, contentDims, groups, xAxisTick) {
         .paddingOuter([0.3]);
     svg
         .append("g")
+        .attr('class', 'x-axis')
         .attr("transform", `translate(0,${contentDims.height})`)
         .call(d3.axisBottom(xAxis).tickSizeOuter(0))
         .call((g) => {
@@ -73,24 +75,42 @@ const createYAxis = function (svg, contentDims, data, yAxisTick) {
     const findMaxY = () => {
         let ans = 0;
         data.forEach((obj) => {
-            ans = Math.max(ans, obj.val);
+            let groupTotal = 0;
+            obj.val.forEach((elem) => {
+                groupTotal += elem.val;
+            });
+            ans = Math.max(ans, groupTotal);
         });
         return ans;
     };
     let yAxis = d3
         .scaleLinear()
         .domain([0, findMaxY()])
-        .range([contentDims.height, 0]);
+        .range([contentDims.height, 0])
+        .nice(10);
     svg
         .append("g")
-        .call(d3.axisLeft(yAxis).tickSizeOuter(0))
+        .attr('class', 'y-axis')
+        .call(d3
+        .axisLeft(yAxis)
+        // .tickSize(0)
+        .tickSizeOuter(0)
+    // .tickPadding([10])
+    // .tickFormat((d, i) => d)
+    )
+        // .call((g) => {
+        //   g.selectAll(".tick line")
+        //     .clone()
+        //     .attr("x2", contentDims.width)
+        //     .attr("stroke-opacity", 0.1);
+        // })
         .call((g) => {
         g.selectAll(".tick text")
             .style("font-size", yAxisTick.fontSize)
             .style("fill", yAxisTick.textColor);
     });
     // .call((g) => {
-    //   g.selectAll(".tick").selectAll("line").style("opacity", 0);
+    //   g.selectAll(".tick line").style("opacity", 0);
     // });
     return yAxis;
 };
@@ -119,41 +139,57 @@ const createYAxisLabel = function (svg, margin, yAxisLabel) {
         .text(yAxisLabel.text);
 };
 const createBars = function (svg, contentDims, data, xAxis, yAxis, tip) {
-    svg
-        .selectAll("mybar")
-        .data(data)
-        .enter()
-        .append("rect")
-        .attr("x", (d) => xAxis(d.key))
-        .attr("width", xAxis.bandwidth())
-        .attr("y", (d) => yAxis(0))
-        .attr("fill", (d) => d.color)
-        .on("mouseover", function (event, d) {
-        d3.select(this).style("opacity", 0.7);
-    })
-        .on("mousemove", function (event, d) {
-        let target = d3
-            .select("#simple-bar-graph-tip-follower")
-            .attr("cx", d3.pointer(event)[0] + 25)
-            .attr("cy", d3.pointer(event)[1])
-            .node();
-        tip.show(d, target);
-    })
-        .on("mouseleave", function (event, d) {
-        d3.select(this).style("opacity", 1);
-        let target = d3.select("#simple-bar-graph-tip-follower").node();
-        tip.hide(d, target);
-    })
-        .transition()
-        .duration(800)
-        .delay((d, i) => i * 100)
-        .attr("y", (d) => yAxis(d.val))
-        .attr("height", (d) => contentDims.height - yAxis(d.val));
+    let stacks = svg.append("g").attr("class", "stacks");
+    data.forEach((obj) => {
+        let stack = stacks.append("g").attr("class", 'stack').attr('id', obj.key);
+        obj.val.forEach((valObj) => {
+            stack
+                .append("rect")
+                .attr("class", "stackRect")
+                .attr('id', valObj.key)
+                .attr("x", xAxis(obj.key))
+                .attr("y", yAxis(valObj["endY"]))
+                .attr("width", xAxis.bandwidth())
+                .attr("fill", valObj.color)
+                .on("mouseover", function (event, d) {
+                d3.select(this).style("opacity", 0.7);
+            })
+                .on("mousemove", function (event, d) {
+                let target = d3
+                    .select("#stacked-bar-graph-tip-follower")
+                    .attr("cx", d3.pointer(event)[0] + 25)
+                    .attr("cy", d3.pointer(event)[1])
+                    .node();
+                tip.show({ group: obj.key, subGroup: valObj.key, val: valObj.val }, target);
+            })
+                .on("mouseleave", function (event, d) {
+                d3.select(this).style("opacity", 1);
+                let target = d3.select("#stacked-bar-graph-tip-follower").node();
+                tip.hide({ group: obj.key, subGroup: valObj.key, val: valObj.val }, target);
+            })
+                .attr("height", yAxis(valObj["startY"]) - yAxis(valObj["endY"]));
+        });
+    });
 };
-const createBarChart = function (svg, svgDims, contentDims, margin, data, tip, xAxisLabel, xAxisTick, yAxisLabel, yAxisTick) {
+const createStackedBarChart = function (svg, svgDims, contentDims, margin, data, tip, xAxisLabel, xAxisTick, yAxisLabel, yAxisTick) {
     let groups = [];
-    data.forEach((elem) => {
-        groups.push(elem.key);
+    data.forEach((obj) => {
+        groups.push(obj.key);
+    });
+    let subGroupsSet = new Set();
+    data.forEach((obj) => {
+        obj.val.forEach((valObj) => {
+            subGroupsSet.add(valObj.key);
+        });
+    });
+    let subGroups = [...subGroupsSet];
+    data.forEach((obj) => {
+        let currY = 0;
+        obj.val.forEach((valObj) => {
+            valObj["startY"] = currY;
+            currY += valObj.val;
+            valObj["endY"] = currY;
+        });
     });
     let xAxis = createXAxis(svg, contentDims, groups, xAxisTick);
     let yAxis = createYAxis(svg, contentDims, data, yAxisTick);
@@ -161,7 +197,7 @@ const createBarChart = function (svg, svgDims, contentDims, margin, data, tip, x
     createYAxisLabel(svg, margin, yAxisLabel);
     createBars(svg, contentDims, data, xAxis, yAxis, tip);
 };
-const barChart = (selector, svgDims, margin, data, xAxisLabel, xAxisTick, yAxisLabel, yAxisTick, tooltip) => {
+const stackedBarChart = function (selector, svgDims, margin, data, xAxisLabel, xAxisTick, yAxisLabel, yAxisTick, tooltip) {
     let contentDims = {
         height: svgDims.height - margin.top - margin.bottom,
         width: svgDims.width - margin.right - margin.left,
@@ -169,7 +205,7 @@ const barChart = (selector, svgDims, margin, data, xAxisLabel, xAxisTick, yAxisL
     let tip = createTooltip(tooltip);
     let svg = createSvg(selector, tip, svgDims, margin);
     createTooltipFollower(svg);
-    createBarChart(svg, svgDims, contentDims, margin, data, tip, xAxisLabel, xAxisTick, yAxisLabel, yAxisTick);
+    createStackedBarChart(svg, svgDims, contentDims, margin, data, tip, xAxisLabel, xAxisTick, yAxisLabel, yAxisTick);
 };
-exports.barChart = barChart;
-//# sourceMappingURL=simpleBarGraph.js.map
+exports.stackedBarChart = stackedBarChart;
+//# sourceMappingURL=stackedBarGraph.js.map
